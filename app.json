@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Taskify",
-    "slug": "Taskify",
+    "name": "Project Blossom",
+    "slug": "project-blossom",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "usesAppleSignIn": true,
-      "bundleIdentifier": "com.anonymous.Taskify",
+      "bundleIdentifier": "app.projectblossom.goalstracker",
       "appleTeamId": "X3957LKCS9"
     },
     "android": {
@@ -24,7 +24,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.Taskify"
+      "package": "app.projectblossom.goalstracker"
     },
     "web": {
       "favicon": "./assets/favicon.png"
