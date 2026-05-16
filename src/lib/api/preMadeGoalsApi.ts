@@ -11,8 +11,8 @@ export interface PreMadeGoalItem {
   habitsCount: number;
   tasksCount: number;
   userCount: string;
-  habits: { title: string; selectedDays: number[]; reminderTime?: string }[];
-  tasks: { title: string; dueDate?: string; reminderTime?: string }[];
+  habits: { title: string; selectedDays: number[]; reminderTime?: string; note?: string }[];
+  tasks: { title: string; dueDate?: string; reminderTime?: string; note?: string }[];
   note: string;
 }
 
@@ -36,6 +36,7 @@ type RawPreMadeGoalItemRow = {
   type: 'habit' | 'task' | string;
   title: string;
   reminder_time: string | null;
+  note: string | null;
   selected_days: unknown;
   due_date: string | null;
   created_at: string | null;
@@ -70,6 +71,7 @@ function normalizeHabits(value: RawPreMadeGoalItemRow[]): PreMadeGoalItem['habit
       title: toStringOrEmpty(row.title),
       selectedDays: toNumberArray(row.selected_days),
       reminderTime: typeof row.reminder_time === 'string' ? row.reminder_time : undefined,
+      note: typeof row.note === 'string' ? row.note : undefined,
     }))
     .filter((item) => item.title.length > 0);
 }
@@ -81,6 +83,7 @@ function normalizeTasks(value: RawPreMadeGoalItemRow[]): PreMadeGoalItem['tasks'
       title: toStringOrEmpty(row.title),
       dueDate: typeof row.due_date === 'string' ? row.due_date : undefined,
       reminderTime: typeof row.reminder_time === 'string' ? row.reminder_time : undefined,
+      note: typeof row.note === 'string' ? row.note : undefined,
     }))
     .filter((item) => item.title.length > 0);
 }
@@ -155,7 +158,7 @@ export async function fetchPreMadeGoals(): Promise<{ data?: PreMadeGoalItem[]; e
   if (preMadeIds.length > 0) {
     const { data: itemRows } = await supabase
       .from('goal_items')
-      .select('goal_id, type, title, reminder_time, selected_days, due_date, created_at')
+      .select('goal_id, type, title, reminder_time, note, selected_days, due_date, created_at')
       .in('goal_id', preMadeIds)
       .order('created_at', { ascending: true });
 
@@ -192,7 +195,7 @@ export async function fetchPreMadeGoals(): Promise<{ data?: PreMadeGoalItem[]; e
     if (sourceGoalIds.length > 0) {
       const { data: sourceItemRows } = await supabase
         .from('goal_items')
-        .select('goal_id, type, title, reminder_time, selected_days, due_date, created_at')
+        .select('goal_id, type, title, reminder_time, note, selected_days, due_date, created_at')
         .in('goal_id', sourceGoalIds)
         .order('created_at', { ascending: true });
 

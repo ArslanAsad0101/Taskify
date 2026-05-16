@@ -220,6 +220,7 @@ const FinalScreen = () => {
       tasksDone: 0,
       dueDate: dueDateValue != null ? new Date(dueDateValue.getTime()) : null,
       achieved: false,
+      note: typeof note === 'string' && note.trim() ? note.trim() : null,
       items,
     });
     navigation.navigate('MainTabs', { screen: 'My Goals' });
@@ -317,12 +318,14 @@ const FinalScreen = () => {
               <EditIcon width={18} height={18} />
             </TouchableOpacity>
           </View>
-          <ScrollView
+          {/* <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.metadataRowPills}
             style={styles.metadataRowPillsScroll}
-          >
+          > */}
+            <View style={[styles.metadataRowPills, styles.metadataRowPillsScroll]}> 
+            
             <TouchableOpacity
               style={styles.metadataPillCategory}
               onPress={() => setSetupModalVisible(true)}
@@ -363,7 +366,8 @@ const FinalScreen = () => {
                 {reminderDisplay || t('setReminder')}
               </Text>
             </TouchableOpacity>
-          </ScrollView>
+            </View>
+          {/* </ScrollView> */}
         </View>
 
         {/* Habit section */}
@@ -611,28 +615,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   metadataRowPillsScroll: {
-    flexGrow: 0,
-    // marginHorizontal: -24,
+       marginHorizontal: -24,
   },
   metadataRowPills: {
     flexDirection: 'row',
-    flexWrap: 'nowrap',
     alignItems: 'center',
-    gap: 2,
-    // paddingHorizontal: 24,
-    paddingVertical:4,
+    gap: 4,
+    paddingHorizontal: 10,
   },
   metadataPillCategory: {
     paddingVertical: 6,
-    paddingHorizontal: 4,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: lightColors.inputBackground,
-    borderRadius: 10,
+    borderRadius: 4,
   },
   metadataPillCategoryText: {
     fontFamily: fontFamilies.urbanistMedium,
-    fontSize: 14,
+    fontSize: 11,
     color: lightColors.subText,
   },
   metadataPillWithIcon: {

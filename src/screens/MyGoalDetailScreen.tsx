@@ -5,7 +5,9 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  KeyboardAvoidingView,
   Image,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -66,9 +68,6 @@ function daysUntil(d: Date | null): number | null {
   return Math.ceil((due.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
 }
 
-const DEFAULT_NOTE =
-  "To achieve this goal, it's essential to follow key steps in the journey. Begin by researching and identifying areas that align with your interests and strengths.";
-
 const MyGoalDetailScreen = () => {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -94,6 +93,7 @@ const MyGoalDetailScreen = () => {
         selectedDays: h.selectedDays ?? [],
         reminderTime: h.reminderTime ?? null,
         variant: 'habit' as const,
+        paused: h.paused ?? false,
       }));
   }, [goal]);
 
@@ -107,6 +107,7 @@ const MyGoalDetailScreen = () => {
         dueDate: formatTaskDueDate(t.dueDate),
         reminderTime: t.reminderTime ?? null,
         variant: 'task' as const,
+        paused: t.paused ?? false,
       }));
   }, [goal]);
 
@@ -124,17 +125,57 @@ const MyGoalDetailScreen = () => {
   const handleAchieve = () => {
     const currentGoal = goal || deletedGoalRef.current?.goal;
     if (!currentGoal) return;
-    const newAchievedState = !currentGoal.achieved;
-    previousAchievedStateRef.current = currentGoal.achieved;
     
-    markAchieved(currentGoal.id, newAchievedState);
+    // If already achieved, allow unachieving without validation
+    if (currentGoal.achieved) {
+      previousAchievedStateRef.current = true;
+      markAchieved(currentGoal.id, false);
+      
+      setToastMessage(t('goalUnachieved'));
+      setToastAction('achieve');
+      setToastVisible(true);
+      return;
+    }
     
-    // Show toast with undo option
-    setToastMessage(newAchievedState ? t('goalAchieved') : t('goalUnachieved'));
+    // Check if all habits and tasks are completed
+    const incompleteHabits = currentGoal.habitsTotal - currentGoal.habitsDone;
+    const incompleteTasks = currentGoal.tasksTotal - currentGoal.tasksDone;
+    
+    if (incompleteHabits > 0 || incompleteTasks > 0) {
+      // Show alert with incomplete items count
+      let message = '';
+      if (incompleteHabits > 0 && incompleteTasks > 0) {
+        message = t('incompleteHabitsAndTasks', { 
+          habitCount: incompleteHabits, 
+          taskCount: incompleteTasks 
+        });
+      } else if (incompleteHabits > 0) {
+        message = t('incompleteItemsMessage', { 
+          count: incompleteHabits, 
+          type: incompleteHabits === 1 ? 'habit' : 'habits' 
+        });
+      } else {
+        message = t('incompleteItemsMessage', { 
+          count: incompleteTasks, 
+          type: incompleteTasks === 1 ? 'task' : 'tasks' 
+        });
+      }
+      
+      Alert.alert(
+        t('cannotAchieveGoal') as string,
+        message,
+        [{ text: t('ok') as string }]
+      );
+      return;
+    }
+    
+    // All items completed, allow achievement
+    previousAchievedStateRef.current = false;
+    markAchieved(currentGoal.id, true);
+    
+    setToastMessage(t('goalAchieved'));
     setToastAction('achieve');
     setToastVisible(true);
-    
-    // Don't navigate immediately - let user see the undo option
   };
 
   const handleDeletePress = () => setDeleteModalVisible(true);
@@ -217,6 +258,16 @@ const MyGoalDetailScreen = () => {
   // Use deleted goal data if goal is deleted but toast is visible
   const displayGoal = goal || deletedGoalRef.current?.goal;
   
+  // Debug: Log the goal to see if note is present
+  console.log('[MyGoalDetailScreen] displayGoal:', {
+    id: displayGoal?.id,
+    title: displayGoal?.title,
+    note: displayGoal?.note,
+    noteType: typeof displayGoal?.note,
+    noteLength: displayGoal?.note?.length,
+    source: displayGoal?.source,
+  });
+  
   if (!displayGoal) {
     return (
       <View style={styles.container}>
@@ -229,6 +280,7 @@ const MyGoalDetailScreen = () => {
   }
 
   return (
+    
     <View style={[styles.container, { paddingBottom: insets.bottom }]}>
       <ScrollView
         style={styles.scroll}
@@ -295,9 +347,19 @@ const MyGoalDetailScreen = () => {
               <Ionicons name="information-circle-outline" size={20} color={lightColors.subText} />
             </TouchableOpacity>
           </View>
-          {habitItems.map((item, index) => (
-            <TrackerCard key={`habit-${index}`} item={{ ...item, variant: 'habit' }} />
-          ))}
+          {habitItems.map((item, index) => {
+            const goalItem = displayGoal.items?.find((i) => i.type === 'habit' && i.title === item.title);
+            return (
+              <TrackerCard 
+                key={`habit-${index}`} 
+                item={{ ...item, variant: 'habit' }}
+                onPress={goalItem ? () => navigation.navigate('HabitDetailScreen', {
+                  goalId: displayGoal.id,
+                  itemId: goalItem.id,
+                }) : undefined}
+              />
+            );
+          })}
           <TouchableOpacity style={styles.addBtn}>
             <Ionicons name="add" size={20} color={lightColors.secondaryBackground} />
             <Text style={styles.addBtnText}>Add Habit</Text>
@@ -312,9 +374,19 @@ const MyGoalDetailScreen = () => {
               <Ionicons name="information-circle-outline" size={20} color={lightColors.subText} />
             </TouchableOpacity>
           </View>
-          {taskItems.map((item, index) => (
-            <TrackerCard key={`task-${index}`} item={{ ...item, variant: 'task' }} />
-          ))}
+          {taskItems.map((item, index) => {
+            const goalItem = displayGoal.items?.find((i) => i.type === 'task' && i.title === item.title);
+            return (
+              <TrackerCard 
+                key={`task-${index}`} 
+                item={{ ...item, variant: 'task' }}
+                onPress={goalItem ? () => navigation.navigate('TaskDetailScreen', {
+                  goalId: displayGoal.id,
+                  itemId: goalItem.id,
+                }) : undefined}
+              />
+            );
+          })}
           <TouchableOpacity style={styles.addBtn}>
             <Ionicons name="add" size={20} color={lightColors.secondaryBackground} />
             <Text style={styles.addBtnText}>Add Task</Text>
@@ -324,7 +396,11 @@ const MyGoalDetailScreen = () => {
         {/* Note */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Note</Text>
-          <Text style={styles.noteText}>{DEFAULT_NOTE}</Text>
+          {displayGoal.note && displayGoal.note.trim() ? (
+            <Text style={styles.noteText}>{displayGoal.note}</Text>
+          ) : (
+            <Text style={styles.noteEmptyText}>No note added</Text>
+          )}
         </View>
 
         <View style={{ height: 24 }} />
@@ -344,7 +420,6 @@ const MyGoalDetailScreen = () => {
           <Text style={styles.deleteBtnText}>{t('deleteGoals') as string}</Text>
         </TouchableOpacity>
       </View>
-
       <ConfirmModal
         visible={deleteModalVisible}
         title={t('deleteGoal') as string}
@@ -525,6 +600,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: lightColors.subText,
     lineHeight: 22,
+    marginTop: 4,
+  },
+  noteEmptyText: {
+    fontFamily: fontFamilies.urbanistMedium,
+    fontSize: 14,
+    color: lightColors.placeholderText,
+    fontStyle: 'italic',
     marginTop: 4,
   },
   footer: {

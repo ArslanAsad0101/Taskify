@@ -116,6 +116,9 @@ export const translations: Record<LocaleCode, Record<string, any>> = {
     deleteGoalConfirmLine2: 'This action cannot be undone.',
     achieveGoalsConfirmMessage: 'You have habits and tasks that have not been completed.',
     achieveGoalsConfirmQuestion: 'Are you sure you want to achieve this goal?',
+    cannotAchieveGoal: 'Cannot Achieve Goal',
+    incompleteItemsMessage: 'You have {{count}} incomplete {{type}}. Please complete them first.',
+    incompleteHabitsAndTasks: 'You have {{habitCount}} incomplete habits and {{taskCount}} incomplete tasks. Please complete them first.',
     goalDeleted: 'Goal deleted',
     goalAchieved: 'Goal achieved',
     goalUnachieved: 'Goal unachieved',
@@ -586,6 +589,9 @@ export const translations: Record<LocaleCode, Record<string, any>> = {
     goalDeleted: 'تم حذف الهدف',
     goalAchieved: 'تم تحقيق الهدف',
     goalUnachieved: 'تم إلغاء تحقيق الهدف',
+    cannotAchieveGoal: 'لا يمكن تحقيق الهدف',
+    incompleteItemsMessage: 'لديك {{count}} {{type}} غير مكتملة. يرجى إكمالها أولاً.',
+    incompleteHabitsAndTasks: 'لديك {{habitCount}} عادات غير مكتملة و {{taskCount}} مهام غير مكتملة. يرجى إكمالها أولاً.',
     undo: 'تراجع',
     
     // Info Tips

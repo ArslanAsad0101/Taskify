@@ -139,8 +139,11 @@ const PreMadeGoalDetailScreen = () => {
   const initialCategory = useMemo<GoalCategory | null>(() => {
     if (mode === 'preMade' && preMadeGoal) return preMadeGoal.category;
     if (mode === 'myGoal') return (myGoal?.category as GoalCategory | null) ?? null;
+    if (mode === 'selfMade' && selfMadePayload?.category != null && String(selfMadePayload.category).trim() !== '') {
+      return selfMadePayload.category as GoalCategory;
+    }
     return null;
-  }, [mode, preMadeGoal, myGoal?.category]);
+  }, [mode, preMadeGoal, myGoal?.category, selfMadePayload?.category]);
 
   const initialReminderDate = useMemo<Date | null>(() => {
     if (mode === 'myGoal' && myGoal?.reminderDate) {
@@ -148,13 +151,17 @@ const PreMadeGoalDetailScreen = () => {
         ? myGoal.reminderDate
         : new Date(myGoal.reminderDate as unknown as number);
     }
+    if (mode === 'selfMade' && selfMadePayload?.reminderDate != null) {
+      return new Date(selfMadePayload.reminderDate);
+    }
     return null;
-  }, [mode, myGoal?.reminderDate]);
+  }, [mode, myGoal?.reminderDate, selfMadePayload?.reminderDate]);
 
-  const initialReminderTime = useMemo(
-    () => (mode === 'myGoal' ? parseReminderTime(myGoal?.reminderTime) : null),
-    [mode, myGoal?.reminderTime]
-  );
+  const initialReminderTime = useMemo(() => {
+    if (mode === 'myGoal') return parseReminderTime(myGoal?.reminderTime);
+    if (mode === 'selfMade' && selfMadePayload?.reminderTime != null) return selfMadePayload.reminderTime;
+    return null;
+  }, [mode, myGoal?.reminderTime, selfMadePayload?.reminderTime]);
 
   const [dueDate, setDueDate] = useState<Date | null>(() => initialDueDate);
   const [categoryValue, setCategoryValue] = useState<GoalCategory | null>(initialCategory);
@@ -338,11 +345,14 @@ const PreMadeGoalDetailScreen = () => {
     return [];
   }, [mode, preMadeGoal, myGoal, selfMadePayload, isPreMadeDraftEditing, draftTasks]);
 
-  const noteText = mode === 'preMade' && preMadeGoal
-    ? preMadeGoal.note
-    : mode === 'selfMade' && selfMadePayload
-      ? selfMadePayload.note || ''
-      : "To achieve this goal, it's essential to follow key steps in the journey. Begin by researching and identifying areas that align with your interests and strengths.";
+  const noteText =
+    mode === 'preMade' && preMadeGoal
+      ? preMadeGoal.note ?? ''
+      : mode === 'selfMade' && selfMadePayload
+        ? selfMadePayload.note || ''
+        : mode === 'myGoal' && myGoal
+          ? myGoal.note ?? ''
+          : '';
 
   const preMadeAlreadyAdded = useMemo(
     () => mode === 'preMade' && preMadeGoal && goals.some((g) => g.source === 'preMade' && g.title === preMadeGoal.title && !g.achieved),
@@ -410,12 +420,14 @@ const PreMadeGoalDetailScreen = () => {
       tasksDone: 0,
       dueDate: dueDate ?? null,
       achieved: false,
+      note: preMadeGoal.note ?? null,
       items: [
         ...habitItems.map((h, i) => ({
           id: `pre-${preMadeGoal.id}-habit-${i}`,
           type: 'habit' as const,
           title: h.title,
           reminderTime: h.reminderTime ?? goalReminderTime,
+          note: h.note ?? undefined,
           selectedDays: h.selectedDays?.length ? h.selectedDays : [0, 1, 2, 3, 4, 5, 6],
         })),
         ...taskItems.map((t, i) => ({
@@ -423,6 +435,7 @@ const PreMadeGoalDetailScreen = () => {
           type: 'task' as const,
           title: t.title,
           reminderTime: t.reminderTime ?? goalReminderTime,
+          note: t.note ?? undefined,
           dueDate: t.dueDate ?? dueDate.toISOString(),
         })),
       ],
@@ -514,6 +527,7 @@ const PreMadeGoalDetailScreen = () => {
         type: 'habit' as const,
         title: h.title,
         reminderTime: h.reminderTime,
+        note: h.note ?? undefined,
         selectedDays: h.selectedDays && h.selectedDays.length > 0 ? h.selectedDays : [0, 1, 2, 3, 4, 5, 6],
       })),
       ...selfMadePayload.tasks.map((t, i) => ({
@@ -521,6 +535,7 @@ const PreMadeGoalDetailScreen = () => {
         type: 'task' as const,
         title: t.title,
         reminderTime: t.reminderTime,
+        note: t.note ?? undefined,
         dueDate: t.dueDate ?? undefined,
       })),
     ];
@@ -538,13 +553,13 @@ const PreMadeGoalDetailScreen = () => {
       tasksDone: 0,
       dueDate: selfMadePayload.dueDate ? new Date(selfMadePayload.dueDate) : null,
       achieved: false,
+      note: selfMadePayload.note && selfMadePayload.note.trim() ? selfMadePayload.note.trim() : null,
       items,
     });
     navigation.navigate('MainTabs', { screen: 'My Goals' });
   };
 
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
-  const [achieveModalVisible, setAchieveModalVisible] = useState(false);
   const [infoModalVisible, setInfoModalVisible] = useState(false);
   const [infoModalType, setInfoModalType] = useState<'habit' | 'task'>('habit');
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -553,8 +568,6 @@ const PreMadeGoalDetailScreen = () => {
   const handleGoToMyGoals = () => {
     navigation.navigate('MainTabs', { screen: 'My Goals' });
   };
-
-  const hasIncompleteItems = myGoal && (myGoal.habitsDone < myGoal.habitsTotal || myGoal.tasksDone < myGoal.tasksTotal);
 
   const handleAchieve = () => {
     if (mode !== 'myGoal') return;
@@ -573,26 +586,42 @@ const PreMadeGoalDetailScreen = () => {
       // Don't navigate immediately - let user see the undo option
       return;
     }
-    if (hasIncompleteItems) {
-      setAchieveModalVisible(true);
-    } else {
-      previousAchievedStateRef.current = false;
-      markAchieved(currentGoal.id, true);
-      
-      setToastMessage(t('goalAchieved'));
-      setToastAction('achieve');
-      setToastVisible(true);
-    }
-  };
-
-  const handleAchieveConfirm = () => {
-    if (mode !== 'myGoal') return;
-    const currentGoal = myGoal || deletedGoalRef.current?.goal;
-    if (!currentGoal) return;
     
+    // Check if all habits and tasks are completed
+    const incompleteHabits = currentGoal.habitsTotal - currentGoal.habitsDone;
+    const incompleteTasks = currentGoal.tasksTotal - currentGoal.tasksDone;
+    
+    if (incompleteHabits > 0 || incompleteTasks > 0) {
+      // Show alert with incomplete items count
+      let message = '';
+      if (incompleteHabits > 0 && incompleteTasks > 0) {
+        message = t('incompleteHabitsAndTasks', { 
+          habitCount: incompleteHabits, 
+          taskCount: incompleteTasks 
+        });
+      } else if (incompleteHabits > 0) {
+        message = t('incompleteItemsMessage', { 
+          count: incompleteHabits, 
+          type: incompleteHabits === 1 ? 'habit' : 'habits' 
+        });
+      } else {
+        message = t('incompleteItemsMessage', { 
+          count: incompleteTasks, 
+          type: incompleteTasks === 1 ? 'task' : 'tasks' 
+        });
+      }
+      
+      Alert.alert(
+        t('cannotAchieveGoal') as string,
+        message,
+        [{ text: t('ok') as string }]
+      );
+      return;
+    }
+    
+    // All items completed, allow achievement
     previousAchievedStateRef.current = false;
     markAchieved(currentGoal.id, true);
-    setAchieveModalVisible(false);
     
     setToastMessage(t('goalAchieved'));
     setToastAction('achieve');
@@ -743,12 +772,17 @@ const PreMadeGoalDetailScreen = () => {
               <EditIcon width={18} height={18} />
             </TouchableOpacity>
           </View>
-          <ScrollView
+          {/* <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.metadataRowPills}
             style={styles.metadataRowPillsScroll}
-          >
+          > */}
+
+
+<View style={[styles.metadataRowPills, styles.metadataRowPillsScroll]}> 
+
+
             {categoryValue != null && (
               <TouchableOpacity
                 style={styles.metadataPillCategory}
@@ -785,7 +819,8 @@ const PreMadeGoalDetailScreen = () => {
                 {reminderDisplay || reminderTimeOnly || t('setReminder')}
               </Text>
             </TouchableOpacity>
-          </ScrollView>
+            </View>
+          {/* </ScrollView> */}
           {mode === 'preMade' && preMadeGoal && (
             <View style={styles.userCountRow}>
               <Ionicons name="people-outline" size={16} color={lightColors.subText} />
@@ -941,7 +976,11 @@ const PreMadeGoalDetailScreen = () => {
 
           <View style={styles.section}>
             <Textt i18nKey="note" style={styles.sectionTitle} />
-            <Text style={styles.noteText}>{noteText || '—'}</Text>
+            {noteText && noteText.trim() ? (
+              <Text style={styles.noteText}>{noteText}</Text>
+            ) : (
+              <Text style={styles.noteEmptyText}>No note added</Text>
+            )}
           </View>
         </View>
 
@@ -999,18 +1038,6 @@ const PreMadeGoalDetailScreen = () => {
         confirmLabel={t('yesDelete') as string}
         onCancel={() => setDeleteModalVisible(false)}
         onConfirm={handleDeleteConfirm}
-      />
-
-      <ConfirmModal
-        visible={achieveModalVisible}
-        title={t('achieveGoals') as string}
-        message={t('achieveGoalsConfirmMessage') as string}
-        messageLine2={t('achieveGoalsConfirmQuestion') as string}
-        cancelLabel={t('cancel') as string}
-        confirmLabel={t('yesAchieve') as string}
-        onCancel={() => setAchieveModalVisible(false)}
-        onConfirm={handleAchieveConfirm}
-        titleColor={lightColors.text}
       />
 
       <Toast
@@ -1125,7 +1152,7 @@ const styles = StyleSheet.create({
   addGoalsSection: {
     marginHorizontal: 24,
     paddingTop: 24,
-    paddingBottom: 20,
+    paddingBottom: 10,
     backgroundColor: lightColors.secondaryBackground,
     borderBottomWidth: 1,
     borderBottomColor: lightColors.border,
@@ -1155,16 +1182,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   metadataRowPillsScroll: {
-    flexGrow: 0,
-    marginHorizontal: -24,
+   marginHorizontal: -24,
   },
   metadataRowPills: {
     flexDirection: 'row',
-    flexWrap: 'nowrap',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 24,
-    paddingVertical: 4,
+    gap: 4,
+    paddingHorizontal: 10,
   },
   metadataPillCategory: {
     paddingVertical: 6,
@@ -1176,7 +1200,7 @@ const styles = StyleSheet.create({
   },
   metadataPillTextDark: {
     fontFamily: fontFamilies.urbanistMedium,
-    fontSize: 12,
+    fontSize: 11,
     color: lightColors.subText,
   },
   metadataPillWithIcon: {
@@ -1228,11 +1252,12 @@ const styles = StyleSheet.create({
   },
   userCount: {
     fontFamily: fontFamilies.urbanistMedium,
-    fontSize: 14,
+    fontSize: 12,
     color: lightColors.subText,
   },
   contentSection: {
     paddingHorizontal: 20,
+    marginTop: 24,
   },
   section: {
     marginBottom: 24,
@@ -1260,6 +1285,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: lightColors.subText,
     lineHeight: 22,
+    marginTop: 4,
+  },
+  noteEmptyText: {
+    fontFamily: fontFamilies.urbanistMedium,
+    fontSize: 14,
+    color: lightColors.placeholderText,
+    fontStyle: 'italic',
     marginTop: 4,
   },
   footer: {

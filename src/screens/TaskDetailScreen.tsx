@@ -10,6 +10,7 @@ import {
   ScrollView,
   TouchableWithoutFeedback,
   Keyboard,
+  Switch,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -77,6 +78,7 @@ const TaskDetailScreen = () => {
   const [dueDateDate, setDueDateDate] = useState<Date | null>(null);
   const [reminderTime, setReminderTime] = useState('');
   const [note, setNote] = useState('');
+  const [paused, setPaused] = useState(false);
   const [dueDateModalVisible, setDueDateModalVisible] = useState(false);
   const [reminderModalVisible, setReminderModalVisible] = useState(false);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
@@ -101,6 +103,7 @@ const TaskDetailScreen = () => {
       setDueDate(initialDue);
       setReminderTime(item.reminderTime ?? '');
       setNote(item.note ?? '');
+      setPaused(item.paused ?? false);
       setDueDateDate(initialDueAsDate);
     }
   }, [item, goal]);
@@ -124,6 +127,7 @@ const TaskDetailScreen = () => {
       reminderTime: reminderTime.trim() || undefined,
       note: note.trim() || undefined,
       dueDate: dueDate.trim() || undefined,
+      paused,
     });
     navigation.goBack();
   };
@@ -247,6 +251,21 @@ const TaskDetailScreen = () => {
               multiline
               textAlignVertical="top"
             />
+
+            <View style={styles.pauseRow}>
+              <View style={styles.pauseLabelWrap}>
+                <Text style={styles.label}>Pause Task</Text>
+                <Text style={styles.pauseDesc}>
+                  Short breaks task, start when you're ready
+                </Text>
+              </View>
+              <Switch
+                value={paused}
+                onValueChange={setPaused}
+                trackColor={{ false: lightColors.border, true: `${lightColors.accent}80` }}
+                thumbColor={lightColors.secondaryBackground}
+              />
+            </View>
           </ScrollView>
         </TouchableWithoutFeedback>
 
@@ -371,6 +390,21 @@ const styles = StyleSheet.create({
   },
   noteInput: {
     minHeight: 80,
+  },
+  pauseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  pauseLabelWrap: {
+    flex: 1,
+  },
+  pauseDesc: {
+    fontFamily: fontFamilies.urbanistMedium,
+    fontSize: 16,
+    color: lightColors.subText,
+    marginTop: 4,
   },
   footer: {
     paddingHorizontal: 20,

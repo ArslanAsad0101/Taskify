@@ -134,6 +134,7 @@ router.get('/', async (req: Request, res: Response) => {
     dueDate: g.due_date ? new Date(g.due_date as string).getTime() : null,
     achieved: g.achieved,
     createdAt: g.created_at,
+    note: g.note ?? null,
     items: (itemsByGoal[g.id as string] ?? []).map((it: Record<string, unknown>) => ({
       id: it.id,
       type: it.type,
@@ -181,6 +182,7 @@ router.post('/', async (req: Request, res: Response) => {
     due_date: body.dueDate ? new Date(body.dueDate).toISOString() : null,
     achieved: body.achieved ?? false,
     created_at: body.createdAt ?? Date.now(),
+    note: body.note ?? null,
   };
 
   const { error: goalErr } = await admin.from('goals').insert(goalRow);
@@ -244,6 +246,7 @@ router.post('/', async (req: Request, res: Response) => {
     preMadeTemplateId: goalRow.pre_made_template_id,
     dueDate: goalRow.due_date ? new Date(goalRow.due_date).getTime() : null,
     createdAt: goalRow.created_at,
+    note: goalRow.note,
     items: insertedItemRows.map((it: Record<string, unknown>) => ({
       id: it.id,
       type: it.type,

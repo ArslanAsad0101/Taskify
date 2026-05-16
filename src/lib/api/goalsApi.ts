@@ -22,6 +22,7 @@ export type GoalsPayload = {
     dueDate: number | null;
     achieved: boolean;
     createdAt: number;
+    note?: string | null;
     items?: Array<{
       id: string;
       type: string;
@@ -89,6 +90,7 @@ export async function createGoal(
     habitsDone?: number;
     tasksTotal?: number;
     tasksDone?: number;
+    note?: string | null;
     items?: Array<{
       id?: string;
       type: string;
@@ -161,10 +163,20 @@ export async function updateGoalItem(
     paused?: boolean;
   }
 ): Promise<{ error?: string }> {
+  console.log('[goalsApi] updateGoalItem called:', { goalId, itemId, updates });
+  console.log('[goalsApi] API URL:', `${API_BASE_URL}/goals/${goalId}/items/${itemId}`);
+  
   const { error } = await request(`/goals/${goalId}/items/${itemId}`, {
     method: 'PATCH',
     accessToken,
     body: JSON.stringify(updates),
   });
+  
+  if (error) {
+    console.error('[goalsApi] updateGoalItem failed:', error);
+  } else {
+    console.log('[goalsApi] updateGoalItem succeeded');
+  }
+  
   return { error };
 }

@@ -44,6 +44,7 @@ import { setI18nLocale } from './src/i18n';
 import { AuthProvider } from './src/lib/auth/AuthProvider';
 import { configureRevenueCat } from './src/lib/purchasesService';
 import { useOfferingsStore } from './store/offeringsStore';
+import { useCoverImagePreloader } from './src/hooks/useCoverImagePreloader';
 const fontMap = {
   Poppins_400Regular,
   Poppins_500Medium,
@@ -78,6 +79,9 @@ export default function App() {
   const [languageHydrated, setLanguageHydrated] = useState(false);
   const colors = getColors(false); // light mode only
   const refreshPurchasesData = useOfferingsStore((state) => state.refreshPurchasesData);
+
+  // Preload cover images on app startup for instant loading
+  useCoverImagePreloader();
 
   useEffect(() => {
     const applyStoredLanguage = () => {

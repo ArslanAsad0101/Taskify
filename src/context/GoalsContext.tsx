@@ -37,6 +37,7 @@ export interface SavedGoal {
   dueDate: Date | null;
   achieved: boolean;
   createdAt: number;
+  note?: string | null;
   /** Habits and tasks for this goal; used on Home to show checklist per date */
   items?: GoalItem[];
 }
@@ -157,7 +158,7 @@ function generateItemId() {
 }
 
 function apiGoalToSavedGoal(g: goalsApi.GoalsPayload['goals'][0]): SavedGoal {
-  return {
+  const savedGoal = {
     id: g.id,
     title: g.title,
     category: g.category ?? null,
@@ -174,6 +175,7 @@ function apiGoalToSavedGoal(g: goalsApi.GoalsPayload['goals'][0]): SavedGoal {
     dueDate: g.dueDate != null ? new Date(g.dueDate) : null,
     achieved: g.achieved,
     createdAt: g.createdAt,
+    note: g.note ?? null,
     items: (g.items ?? []).map((it) => ({
       id: it.id,
       type: it.type as GoalItemType,
@@ -185,6 +187,8 @@ function apiGoalToSavedGoal(g: goalsApi.GoalsPayload['goals'][0]): SavedGoal {
       paused: it.paused ?? false,
     })),
   };
+  console.log('[GoalsContext] apiGoalToSavedGoal - Goal:', savedGoal.id, 'Title:', savedGoal.title, 'Note:', savedGoal.note, 'Source:', savedGoal.source);
+  return savedGoal;
 }
 
 export function GoalsProvider({ children }: { children: React.ReactNode }) {
@@ -215,7 +219,15 @@ export function GoalsProvider({ children }: { children: React.ReactNode }) {
   }, [session?.access_token]);
 
   const addGoal = useCallback((goal: Omit<SavedGoal, 'id' | 'createdAt'>): string => {
-    console.log('addGoal called with coverUrl:', goal.coverUrl, 'coverIndex:', goal.coverIndex);
+    console.log('[GoalsContext] addGoal called with:', {
+      title: goal.title,
+      source: goal.source,
+      note: goal.note,
+      noteType: typeof goal.note,
+      noteLength: goal.note?.length,
+      coverUrl: goal.coverUrl,
+      coverIndex: goal.coverIndex,
+    });
     
     const id = generateId();
     const items = goal.items?.map((it) => ({
@@ -230,7 +242,14 @@ export function GoalsProvider({ children }: { children: React.ReactNode }) {
       items: items ?? [],
     };
     
-    console.log('Created newGoal with coverUrl:', newGoal.coverUrl, 'coverIndex:', newGoal.coverIndex);
+    console.log('[GoalsContext] Created newGoal:', {
+      id: newGoal.id,
+      title: newGoal.title,
+      note: newGoal.note,
+      noteType: typeof newGoal.note,
+      coverUrl: newGoal.coverUrl,
+      coverIndex: newGoal.coverIndex,
+    });
     
     // Insert newest goal at the front so it appears at the top of My Goals.
     setGoals((prev) => [newGoal, ...prev]);
@@ -264,6 +283,7 @@ export function GoalsProvider({ children }: { children: React.ReactNode }) {
           dueDate,
           achieved: newGoal.achieved,
           createdAt: newGoal.createdAt,
+          note: newGoal.note ?? null,
           items: (newGoal.items ?? []).map((it) => ({
             id: it.id,
             type: it.type,
@@ -455,6 +475,7 @@ export function GoalsProvider({ children }: { children: React.ReactNode }) {
             dueDate,
             achieved: goal.achieved,
             createdAt: goal.createdAt,
+            note: goal.note ?? null,
             items: (goal.items ?? []).map((it) => ({
               id: it.id,
               type: it.type,
@@ -573,9 +594,12 @@ export function GoalsProvider({ children }: { children: React.ReactNode }) {
   }, [goals, itemCompletions]);
 
   const updateGoalItem = useCallback((goalId: string, itemId: string, updates: Partial<Pick<GoalItem, 'title' | 'reminderTime' | 'note' | 'selectedDays' | 'dueDate' | 'paused'>>) => {
+    console.log('[GoalsContext] updateGoalItem called:', { goalId, itemId, updates });
     const token = session?.access_token;
     const previousGoal = goals.find((g) => g.id === goalId);
     const previousItem = previousGoal?.items?.find((i) => i.id === itemId);
+    console.log('[GoalsContext] Previous item:', previousItem);
+    
     setGoals((prev) =>
       prev.map((g) => {
         if (g.id !== goalId || !g.items) return g;
@@ -585,7 +609,9 @@ export function GoalsProvider({ children }: { children: React.ReactNode }) {
         };
       })
     );
+    
     if (token) {
+      console.log('[GoalsContext] Calling API to update goal item...');
       goalsApi.updateGoalItem(token, goalId, itemId, {
         title: updates.title,
         reminderTime: updates.reminderTime,
@@ -594,19 +620,26 @@ export function GoalsProvider({ children }: { children: React.ReactNode }) {
         dueDate: updates.dueDate,
         paused: updates.paused,
       }).then(({ error }) => {
-        if (error && previousItem) {
-          console.warn('[GoalsContext] updateGoalItem failed:', error);
-          setGoals((prev) =>
-            prev.map((g) => {
-              if (g.id !== goalId || !g.items) return g;
-              return {
-                ...g,
-                items: g.items.map((i) => (i.id === itemId ? { ...i, ...previousItem } : i)),
-              };
-            })
-          );
+        if (error) {
+          console.error('[GoalsContext] updateGoalItem API failed:', error);
+          if (previousItem) {
+            console.log('[GoalsContext] Rolling back changes...');
+            setGoals((prev) =>
+              prev.map((g) => {
+                if (g.id !== goalId || !g.items) return g;
+                return {
+                  ...g,
+                  items: g.items.map((i) => (i.id === itemId ? { ...i, ...previousItem } : i)),
+                };
+              })
+            );
+          }
+        } else {
+          console.log('[GoalsContext] updateGoalItem API succeeded');
         }
       });
+    } else {
+      console.warn('[GoalsContext] No access token available, changes will not be persisted');
     }
   }, [goals, session?.access_token]);
 
@@ -614,7 +647,7 @@ export function GoalsProvider({ children }: { children: React.ReactNode }) {
     (dateStr: string) => {
       let total = 0;
       let completed = 0;
-      // Only count items from non-achieved goals
+      // Only count items from non-achieved goals (include paused items in total count)
       goals.filter(g => !g.achieved).forEach((g) => {
         (g.items ?? []).forEach((it) => {
           if (!isItemScheduledForDateWithGoal(g, it, dateStr)) return;

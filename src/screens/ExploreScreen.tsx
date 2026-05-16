@@ -188,11 +188,14 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   bannerImage: {
-    width: '90%',
+    width: '95%',
     height: 180,
     borderRadius: 8,
-    marginHorizontal: 16,
-    marginBottom: 24,
+    // justifyContent: 'center',
+    // alignItems: 'center',
+    marginLeft: 10,
+    paddingRight: 12,
+    marginBottom: 12,
     backgroundColor: lightColors.inputBackground,
   },
 });

@@ -108,9 +108,6 @@ const DEFAULT_TASKS: TrackerCardItem[] = [
   },
 ];
 
-const DEFAULT_NOTE =
-  "To achieve the goal of becoming a UI/UX Designer, it's essential to follow key steps in the journey. Begin by researching various career paths within the field and identifying areas of specialization that align with personal interests and strengths.";
-
 const AiMadeScreen = () => {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -135,22 +132,54 @@ const AiMadeScreen = () => {
   const draftTasks = useGoalStore((s) => s.draftTasks);
   const setDraftHabits = useGoalStore((s) => s.setDraftHabits);
   const setDraftTasks = useGoalStore((s) => s.setDraftTasks);
+  const aiMadeHabits = useGoalStore((s) => s.aiMadeHabits);
+  const aiMadeTasks = useGoalStore((s) => s.aiMadeTasks);
+  const setAiMadeHabits = useGoalStore((s) => s.setAiMadeHabits);
+  const setAiMadeTasks = useGoalStore((s) => s.setAiMadeTasks);
+  const updateAiMadeHabit = useGoalStore((s) => s.updateAiMadeHabit);
+  const updateAiMadeTask = useGoalStore((s) => s.updateAiMadeTask);
+  const addAiMadeHabit = useGoalStore((s) => s.addAiMadeHabit);
+  const addAiMadeTask = useGoalStore((s) => s.addAiMadeTask);
+  const resetAiMade = useGoalStore((s) => s.resetAiMade);
 
-  const [habits, setHabits] = useState<TrackerCardItem[]>(() =>
+  // Use refs to track the latest habits/tasks to prevent resets
+  const habitsRef = React.useRef<TrackerCardItem[]>(
     initialHabitsParam && initialHabitsParam.length > 0
       ? initialHabitsParam
       : DEFAULT_HABITS
   );
-  const [tasks, setTasks] = useState<TrackerCardItem[]>(() =>
+  const tasksRef = React.useRef<TrackerCardItem[]>(
     initialTasksParam && initialTasksParam.length > 0
       ? initialTasksParam
       : DEFAULT_TASKS
   );
 
-  const habitsList = isSelfMade ? draftHabits : habits;
-  const tasksList = isSelfMade ? draftTasks : tasks;
+  const [habits, setHabits] = useState<TrackerCardItem[]>(() => habitsRef.current);
+  const [tasks, setTasks] = useState<TrackerCardItem[]>(() => tasksRef.current);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    habitsRef.current = habits;
+  }, [habits]);
+
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
+
+  const habitsList = isSelfMade ? draftHabits : (aiMadeHabits.length > 0 ? aiMadeHabits : habits);
+  const tasksList = isSelfMade ? draftTasks : (aiMadeTasks.length > 0 ? aiMadeTasks : tasks);
+  
+  // Debug: Log current state
+  useEffect(() => {
+    if (!isSelfMade) {
+      console.log('[AiMade] AI-made habits from store:', aiMadeHabits.map(h => h.title));
+      console.log('[AiMade] AI-made tasks from store:', aiMadeTasks.map(t => t.title));
+      console.log('[AiMade] habitsList:', habitsList.map(h => h.title));
+      console.log('[AiMade] tasksList:', tasksList.map(t => t.title));
+    }
+  }, [isSelfMade, aiMadeHabits, aiMadeTasks, habitsList, tasksList]);
   const [note, setNote] = useState(
-    isSelfMade ? '' : initialNoteParam ?? DEFAULT_NOTE
+    isSelfMade ? '' : initialNoteParam ?? ''
   );
   const [goalTitle, setGoalTitle] = useState(
     isSelfMade ? '' : initialGoalTitleParam ?? prompt
@@ -220,9 +249,56 @@ const AiMadeScreen = () => {
     if (isSelfMade) {
       setDraftHabits(initialHabitsParam ?? []);
       setDraftTasks(initialTasksParam ?? []);
+    } else {
+      // Initialize AI-made store if empty
+      if (aiMadeHabits.length === 0 && habits.length > 0) {
+        setAiMadeHabits(habits);
+      }
+      if (aiMadeTasks.length === 0 && tasks.length > 0) {
+        setAiMadeTasks(tasks);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Handle updates from AddTaskScreen for AI-made goals
+  useEffect(() => {
+    if (!isSelfMade && route.params?.updatedHabit) {
+      const { index, item } = route.params.updatedHabit;
+      console.log('[AiMade] Updating habit at index', index, 'with item:', item.title);
+      updateAiMadeHabit(index, item);
+      // Clear the param to avoid re-applying
+      navigation.setParams({ updatedHabit: undefined } as any);
+    }
+  }, [route.params?.updatedHabit, isSelfMade, navigation, updateAiMadeHabit]);
+
+  useEffect(() => {
+    if (!isSelfMade && route.params?.updatedTask) {
+      const { index, item } = route.params.updatedTask;
+      console.log('[AiMade] Updating task at index', index, 'with item:', item.title);
+      updateAiMadeTask(index, item);
+      // Clear the param to avoid re-applying
+      navigation.setParams({ updatedTask: undefined } as any);
+    }
+  }, [route.params?.updatedTask, isSelfMade, navigation, updateAiMadeTask]);
+
+  useEffect(() => {
+    if (!isSelfMade && route.params?.addedHabit) {
+      console.log('[AiMade] Adding new habit:', route.params.addedHabit.title);
+      addAiMadeHabit(route.params.addedHabit);
+      // Clear the param to avoid re-applying
+      navigation.setParams({ addedHabit: undefined } as any);
+    }
+  }, [route.params?.addedHabit, isSelfMade, navigation, addAiMadeHabit]);
+
+  useEffect(() => {
+    if (!isSelfMade && route.params?.addedTask) {
+      console.log('[AiMade] Adding new task:', route.params.addedTask.title);
+      addAiMadeTask(route.params.addedTask);
+      // Clear the param to avoid re-applying
+      navigation.setParams({ addedTask: undefined } as any);
+    }
+  }, [route.params?.addedTask, isSelfMade, navigation, addAiMadeTask]);
 
   const openAddHabit = (habitIndex?: number) => {
     const isEdit = habitIndex !== undefined;
@@ -250,6 +326,7 @@ const AiMadeScreen = () => {
 
   const handleRegenerate = () => {
     Keyboard.dismiss();
+    resetAiMade(); // Clear AI-made store before regenerating
     navigation.navigate('AiGenetratingScreen');
   };
 
@@ -291,15 +368,20 @@ const AiMadeScreen = () => {
         coverIndex,
         galleryImageUri,
         dueDate: dueDate ? dueDate.getTime() : null,
+        category: category ?? null,
+        reminderDate: reminderDate != null ? reminderDate.getTime() : null,
+        reminderTime: reminderTime ?? null,
         note,
         habits: habitsList.map((h) => ({
           title: h.title,
           reminderTime: h.reminderTime,
+          note: h.note,
           selectedDays: h.selectedDays ?? [],
         })),
         tasks: tasksList.map((t) => ({
           title: t.title,
           reminderTime: t.reminderTime,
+          note: t.note,
           dueDate: t.dueDate ?? null,
         })),
       },
@@ -463,12 +545,16 @@ const AiMadeScreen = () => {
                       <EditIcon width={18} height={18}/>
                     </TouchableOpacity>
                   </View>
-                  <ScrollView
+                  {/* <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.metadataRowPills}
-                    style={styles.metadataRowPillsScroll}
-                  >
+                    style={styles.metadataRowPillsScroll} */}
+                  {/* > */}
+
+
+<View style={[styles.metadataRowPills, styles.metadataRowPillsScroll]}> 
+
                     <TouchableOpacity
                       style={styles.metadataPillCategory}
                       onPress={() => setSetUpGoalsModalVisible(true)}
@@ -503,7 +589,8 @@ const AiMadeScreen = () => {
                         {reminderDisplay || reminderTimeOnly || t('setReminder')}
                       </Text>
                     </TouchableOpacity>
-                  </ScrollView>
+                    </View>
+                  {/* </ScrollView> */}
                 </View>
 
                 <SetUpGoalsModal
@@ -1035,16 +1122,13 @@ height : 300,
     justifyContent: 'center',
   },
   metadataRowPillsScroll: {
-    flexGrow: 0,
     marginHorizontal: -24,
   },
   metadataRowPills: {
     flexDirection: 'row',
-    flexWrap: 'nowrap',
     alignItems: 'center',
-    gap: 6,
-    // paddingHorizontal: 24,
-    paddingVertical: 4,
+    gap: 4,
+    paddingHorizontal: 10,
   },
   metadataPillCategory: {
     paddingVertical: 6,
@@ -1060,12 +1144,12 @@ height : 300,
     alignItems: 'center',
     gap: 4,
     paddingVertical: 4,
-    paddingHorizontal: 0,
+    // paddingHorizontal: 0,
     flexShrink: 0,
   },
   metadataPillTextDark: {
     fontFamily: fontFamilies.urbanistMedium,
-    fontSize: 12,
+    fontSize: 11,
     color: lightColors.subText,
   },
   dueDateTextWrap: {

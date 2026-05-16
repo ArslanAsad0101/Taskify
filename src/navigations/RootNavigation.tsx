@@ -135,9 +135,15 @@ export type RootStackParamList = {
       coverIndex: number;
       galleryImageUri?: string | null;
       dueDate: number | null;
+      /** Goal-level category from self-made flow (same as pre-made / saved goals). */
+      category?: string | null;
+      /** Goal-level reminder date (epoch ms). */
+      reminderDate?: number | null;
+      /** Goal-level reminder clock (12h); paired with reminderDate for full display. */
+      reminderTime?: { hours: number; minutes: number; am: boolean } | null;
       note: string;
-      habits: { title: string; reminderTime?: string; selectedDays?: number[] }[];
-      tasks: { title: string; reminderTime?: string; dueDate?: string | null }[];
+      habits: { title: string; reminderTime?: string; note?: string; selectedDays?: number[] }[];
+      tasks: { title: string; reminderTime?: string; note?: string; dueDate?: string | null }[];
     };
   };
   ExploreSearch: { fromPreMade?: boolean } | undefined;

@@ -54,10 +54,10 @@ function MainTabs() {
         tabBarStyle: {
           backgroundColor: lightColors.secondaryBackground,
           borderTopColor: lightColors.border,
-          paddingTop: 18,
-          paddingBottom: 38,
+          paddingTop: 5,
+          paddingBottom: 10,
           paddingHorizontal: 8,
-          marginBottom: 6,
+          // marginBottom: 6,
           // height: 70,
         },
         tabBarLabelStyle: {

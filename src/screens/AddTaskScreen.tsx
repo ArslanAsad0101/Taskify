@@ -90,7 +90,7 @@ const AddTaskScreen = () => {
       } else {
         setDueDate('');
       }
-      setNote('');
+      setNote(initialItem.note ?? '');
     } else {
       setTitle(isHabit ? '' : '');
       setSelectedDays(isHabit ? [] : []);
@@ -135,6 +135,7 @@ const AddTaskScreen = () => {
       title: title.trim() || (isHabit ? 'New Habit' : 'New Task'),
       selectedDays: isHabit ? selectedDays : [],
       reminderTime: reminderTime.trim() || undefined,
+      note: note.trim() || undefined,
       variant: mode as 'habit' | 'task',
     };
     if (isHabit) return base;
@@ -160,9 +161,11 @@ const AddTaskScreen = () => {
 
     const item = buildItem();
     if (isGoalItemEdit) {
+      console.log('[AddTaskScreen] Editing existing goal item:', { goalId, itemId, item });
       updateGoalItem(goalId, itemId, {
         title: item.title,
         reminderTime: item.reminderTime,
+        note: item.note,
         selectedDays: isHabit ? item.selectedDays : undefined,
         dueDate: !isHabit ? item.dueDate : undefined,
       });

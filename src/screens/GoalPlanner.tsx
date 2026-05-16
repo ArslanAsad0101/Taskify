@@ -93,7 +93,7 @@ const GoalPlannerScreen = () => {
   );
   const [habits] = useState<TrackerCardItem[]>(initialHabits);
   const [tasks] = useState<TrackerCardItem[]>(initialTasks);
-  const [note] = useState(initialNote);
+  const [note, setNote] = useState(initialNote);
 
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [dueDateModalVisible, setDueDateModalVisible] = useState(false);
@@ -218,6 +218,7 @@ const GoalPlannerScreen = () => {
         type: 'habit' as const,
         title: habit.title,
         reminderTime: habit.reminderTime ?? undefined,
+        note: habit.note ?? undefined,
         selectedDays: habit.selectedDays ?? [],
       })),
       ...tasks.map((task, index) => ({
@@ -225,6 +226,7 @@ const GoalPlannerScreen = () => {
         type: 'task' as const,
         title: task.title,
         reminderTime: task.reminderTime ?? undefined,
+        note: task.note ?? undefined,
         dueDate: task.dueDate ?? undefined,
       })),
     ];
@@ -246,6 +248,7 @@ const GoalPlannerScreen = () => {
       tasksDone: 0,
       dueDate: new Date(dueDate.getTime()),
       achieved: false,
+      note: note.trim() || null,
       items,
     });
     navigation.navigate('MainTabs', { screen: 'My Goals' });
@@ -411,6 +414,20 @@ const GoalPlannerScreen = () => {
               </TouchableOpacity>
             )}
           </TouchableOpacity>
+        </View>
+
+        {/* Part 6: Note */}
+        <View style={styles.section}>
+          <Textt i18nKey="note" style={styles.label} />
+          <TextInput
+            style={styles.noteInput}
+            value={note}
+            onChangeText={setNote}
+            placeholder={t('addYourNote')}
+            placeholderTextColor={lightColors.placeholderText}
+            multiline
+            textAlignVertical="top"
+          />
         </View>
       </ScrollView>
 
@@ -609,6 +626,17 @@ const styles = StyleSheet.create({
   },
   clearBtn: {
     padding: 4,
+  },
+  noteInput: {
+    backgroundColor: lightColors.inputBackground,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontFamily: fontFamilies.urbanistMedium,
+    fontSize: 16,
+    color: lightColors.text,
+    minHeight: 120,
+    textAlignVertical: 'top',
   },
   footer: {
     position: 'absolute',

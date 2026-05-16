@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -19,6 +19,7 @@ import ActivitySetting from '../assets/svgs/ActivitySetting';
 import LogoutModal from '../components/LogoutModal';
 import { useAuth } from '../lib/auth/AuthProvider';
 import { showOverflowMenu } from '../utils/showOverflowMenu';
+import { useGoals } from '../context/GoalsContext';
 
 function displayNameFromUser(user: { email?: string | null; user_metadata?: Record<string, unknown> } | null): string {
   if (!user) return '';
@@ -34,15 +35,37 @@ const AccountScreen = () => {
   const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user, signOut } = useAuth();
+  const { goals, itemCompletions } = useGoals();
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
 
   const profileName = displayNameFromUser(user);
   const profileEmail = user?.email ?? '';
-  const profileStats = {
-    goalsAchieved: 0,
-    habitsFormed: 0,
-    tasksFinished: 0,
-  };
+  
+  // Calculate actual stats from goals
+  const profileStats = useMemo(() => {
+    const goalsAchieved = goals.filter(goal => goal.achieved).length;
+    
+    // Count total unique habits across all goals
+    const allHabits = goals.flatMap(goal => 
+      (goal.items ?? []).filter(item => item.type === 'habit')
+    );
+    const habitsFormed = allHabits.length;
+    
+    // Count total completed tasks (tasks that have been checked off at least once)
+    const allTasks = goals.flatMap(goal => 
+      (goal.items ?? []).filter(item => item.type === 'task')
+    );
+    const tasksFinished = allTasks.filter(task => {
+      const completions = itemCompletions[task.id] ?? [];
+      return completions.length > 0;
+    }).length;
+    
+    return {
+      goalsAchieved,
+      habitsFormed,
+      tasksFinished,
+    };
+  }, [goals, itemCompletions]);
 
   const handleLogout = async () => {
     setLogoutModalVisible(false);
