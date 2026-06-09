@@ -32,6 +32,7 @@ import {
 } from '@expo-google-fonts/urbanist';
 import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
+import * as Notifications from 'expo-notifications';
 import React, { useState, useEffect } from 'react';
 import { View, I18nManager } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -45,6 +46,15 @@ import { AuthProvider } from './src/lib/auth/AuthProvider';
 import { configureRevenueCat } from './src/lib/purchasesService';
 import { useOfferingsStore } from './store/offeringsStore';
 import { useCoverImagePreloader } from './src/hooks/useCoverImagePreloader';
+
+// Configure how notifications are handled when app is in foreground
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 const fontMap = {
   Poppins_400Regular,
   Poppins_500Medium,

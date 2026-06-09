@@ -328,6 +328,11 @@ export const translations: Record<LocaleCode, Record<string, any>> = {
     logout: 'Logout',
     logoutConfirmMessage: 'Are you sure you want to log out?',
     yesLogout: 'Yes, Logout',
+    timeZone: 'Time Zone',
+    searchTimezone: 'Search timezone...',
+    noTimezonesFound: 'No timezones found',
+    currentTimezone: 'Current timezone',
+    autoDetectTimezone: 'Auto-Detect My Timezone',
     upgradePlanNow: 'Upgrade Plan Now!',
     upgradePlanSubtitle: 'Enjoy all the benefits and explore more possibilities',
     // Upgrade Plan screen
@@ -512,6 +517,11 @@ export const translations: Record<LocaleCode, Record<string, any>> = {
     logout: 'تسجيل الخروج',
     logoutConfirmMessage: 'هل أنت متأكد أنك تريد تسجيل الخروج؟',
     yesLogout: 'نعم، تسجيل الخروج',
+    timeZone: 'المنطقة الزمنية',
+    searchTimezone: 'البحث عن منطقة زمنية...',
+    noTimezonesFound: 'لم يتم العثور على مناطق زمنية',
+    currentTimezone: 'المنطقة الزمنية الحالية',
+    autoDetectTimezone: 'اكتشاف منطقتي الزمنية تلقائياً',
     upgradePlanNow: 'ترقية الخطة الآن!',
     upgradePlanSubtitle: 'استمتع بجميع المزايا واستكشف المزيد من الاحتمالات',
     // Upgrade Plan screen

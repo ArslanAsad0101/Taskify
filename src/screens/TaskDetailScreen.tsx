@@ -122,11 +122,20 @@ const TaskDetailScreen = () => {
   };
 
   const handleSave = () => {
+    // Convert dueDateDate (Date object) to YYYY-MM-DD format for backend
+    let dueDateFormatted: string | undefined = undefined;
+    if (dueDateDate) {
+      const year = dueDateDate.getFullYear();
+      const month = String(dueDateDate.getMonth() + 1).padStart(2, '0');
+      const day = String(dueDateDate.getDate()).padStart(2, '0');
+      dueDateFormatted = `${year}-${month}-${day}`;
+    }
+    
     updateGoalItem(goalId, itemId, {
       title: title.trim() || item?.title,
       reminderTime: reminderTime.trim() || undefined,
       note: note.trim() || undefined,
-      dueDate: dueDate.trim() || undefined,
+      dueDate: dueDateFormatted,
       paused,
     });
     navigation.goBack();
@@ -292,7 +301,20 @@ const TaskDetailScreen = () => {
         visible={dueDateModalVisible}
         title="Task Due Date"
         selectedDate={dueDateDate}
+        maxDate={goal?.dueDate || undefined}
         onSelect={(date) => {
+          // Validate: task due date cannot be after goal's due date
+          if (goal?.dueDate) {
+            const goalDueTime = new Date(goal.dueDate).setHours(0, 0, 0, 0);
+            const selectedTime = new Date(date).setHours(0, 0, 0, 0);
+            
+            if (selectedTime > goalDueTime) {
+              // Show alert - date is after goal due date
+              alert('Task due date cannot be after the goal due date');
+              return;
+            }
+          }
+          
           setDueDateDate(date);
           setDueDate(formatDate(date));
         }}

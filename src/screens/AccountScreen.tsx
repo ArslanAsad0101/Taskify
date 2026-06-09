@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { lightColors } from '../../utils/colors';
 import { useTranslation } from '../i18n';
@@ -16,10 +16,14 @@ import EyeSetting from '../assets/svgs/EyeSetting';
 import LogoutIcon from '../assets/svgs/LogoutIcon';
 import ShieldSetting from '../assets/svgs/ShieldSetting';
 import ActivitySetting from '../assets/svgs/ActivitySetting';
+import TimezoneSetting from '../assets/svgs/TimezoneSetting';
 import LogoutModal from '../components/LogoutModal';
 import { useAuth } from '../lib/auth/AuthProvider';
 import { showOverflowMenu } from '../utils/showOverflowMenu';
 import { useGoals } from '../context/GoalsContext';
+import { supabase } from '../lib/supabase/client';
+import { getTimezoneLabel } from '../data/timezones';
+import * as Localization from 'expo-localization';
 
 function displayNameFromUser(user: { email?: string | null; user_metadata?: Record<string, unknown> } | null): string {
   if (!user) return '';
@@ -37,9 +41,82 @@ const AccountScreen = () => {
   const { user, signOut } = useAuth();
   const { goals, itemCompletions } = useGoals();
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [currentTimezone, setCurrentTimezone] = useState<string | null>(null);
 
   const profileName = displayNameFromUser(user);
   const profileEmail = user?.email ?? '';
+
+  // Fetch and set user's timezone
+  const fetchTimezone = React.useCallback(async () => {
+    if (!user?.id) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('timezone')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.error('[Timezone] Error fetching timezone:', error);
+        // Set device timezone as default
+        let deviceTimezone = 'UTC';
+        try {
+          const locales = Localization.getLocales();
+          if (locales && locales[0] && locales[0].timeZone) {
+            deviceTimezone = locales[0].timeZone;
+          } else {
+            const calendars = Localization.getCalendars();
+            if (calendars && calendars[0] && calendars[0].timeZone) {
+              deviceTimezone = calendars[0].timeZone;
+            }
+          }
+        } catch (e) {
+          console.warn('[Timezone] Could not detect device timezone');
+        }
+        setCurrentTimezone(deviceTimezone);
+        return;
+      }
+
+      // Use saved timezone or detect device timezone
+      let timezone = data?.timezone;
+      if (!timezone) {
+        try {
+          const locales = Localization.getLocales();
+          if (locales && locales[0] && locales[0].timeZone) {
+            timezone = locales[0].timeZone;
+          } else {
+            const calendars = Localization.getCalendars();
+            if (calendars && calendars[0] && calendars[0].timeZone) {
+              timezone = calendars[0].timeZone;
+            } else {
+              timezone = 'UTC';
+            }
+          }
+        } catch (e) {
+          timezone = 'UTC';
+        }
+      }
+      
+      console.log('[AccountScreen] Current timezone:', timezone);
+      setCurrentTimezone(timezone);
+    } catch (error) {
+      console.error('[Timezone] Error:', error);
+      setCurrentTimezone('UTC');
+    }
+  }, [user?.id]);
+
+  // Fetch timezone on mount
+  useEffect(() => {
+    fetchTimezone();
+  }, [fetchTimezone]);
+
+  // Refresh timezone when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchTimezone();
+    }, [fetchTimezone])
+  );
   
   // Calculate actual stats from goals
   const profileStats = useMemo(() => {
@@ -105,6 +182,12 @@ const AccountScreen = () => {
       icon: <ShieldSetting width={24} height={24} color={lightColors.smallText} />,
       label: t('accountSecurity'),
       onPress: () => navigation.navigate('AccountSecurityScreen'),
+    },
+    {
+      icon: <TimezoneSetting width={24} height={24} color={lightColors.smallText} />,
+      label: t('timeZone'),
+      subtitle: currentTimezone ? getTimezoneLabel(currentTimezone) : t('currentTimezone'),
+      onPress: () => navigation.navigate('TimeZoneScreen'),
     },
     // {
     //   icon: <EyeSetting width={24} height={24} color={lightColors.smallText} />,

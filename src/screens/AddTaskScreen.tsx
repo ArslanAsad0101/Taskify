@@ -139,7 +139,17 @@ const AddTaskScreen = () => {
       variant: mode as 'habit' | 'task',
     };
     if (isHabit) return base;
-    return { ...base, dueDate: dueDate.trim() || undefined };
+    
+    // Convert dueDateDate (Date object) to YYYY-MM-DD format for backend
+    let dueDateFormatted: string | undefined = undefined;
+    if (dueDateDate) {
+      const year = dueDateDate.getFullYear();
+      const month = String(dueDateDate.getMonth() + 1).padStart(2, '0');
+      const day = String(dueDateDate.getDate()).padStart(2, '0');
+      dueDateFormatted = `${year}-${month}-${day}`;
+    }
+    
+    return { ...base, dueDate: dueDateFormatted };
   };
 
   const addDraftHabit = useGoalStore((s) => s.addDraftHabit);

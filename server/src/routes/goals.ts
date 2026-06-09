@@ -3,6 +3,14 @@
 import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser } from '../lib/auth';
+import { 
+  scheduleGoalReminder, 
+  scheduleGoalDue, 
+  scheduleHabitReminders, 
+  scheduleTaskDue,
+  cancelGoalNotifications 
+} from '../services/notificationScheduler';
+import { convertLocalToUTC } from '../services/timezoneHelper';
 
 const router = Router();
 const supabaseUrl = process.env.SUPABASE_URL ?? '';
@@ -10,6 +18,26 @@ const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
 
 function getAdminClient() {
   return createClient(supabaseUrl, supabaseServiceRoleKey);
+}
+
+/**
+ * Format a Date object as YYYY-MM-DD without timezone conversion.
+ * This preserves the calendar date regardless of the device's timezone.
+ */
+function formatDateOnly(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Parse a YYYY-MM-DD date string to a timestamp at local midnight.
+ * Avoids timezone shift by not parsing as UTC.
+ */
+function parseDateStringToTimestamp(dateStr: string): number {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day).getTime();
 }
 
 function parseUserCountText(value: string): number {
@@ -121,7 +149,7 @@ router.get('/', async (req: Request, res: Response) => {
     id: g.id,
     title: g.title,
     category: g.category ?? null,
-    reminderDate: g.reminder_date ? new Date(g.reminder_date as string).getTime() : null,
+    reminderDate: g.reminder_date ? parseDateStringToTimestamp(g.reminder_date as string) : null,
     reminderTime: g.reminder_time ?? null,
     preMadeTemplateId: g.pre_made_template_id ?? null,
     coverIndex: g.cover_index ?? 0,
@@ -131,7 +159,7 @@ router.get('/', async (req: Request, res: Response) => {
     habitsDone: g.habits_done,
     tasksTotal: g.tasks_total,
     tasksDone: g.tasks_done,
-    dueDate: g.due_date ? new Date(g.due_date as string).getTime() : null,
+    dueDate: g.due_date ? parseDateStringToTimestamp(g.due_date as string) : null,
     achieved: g.achieved,
     createdAt: g.created_at,
     note: g.note ?? null,
@@ -146,6 +174,15 @@ router.get('/', async (req: Request, res: Response) => {
       paused: it.paused ?? false,
     })),
   }));
+
+  // DEBUG: Log what we're reading
+  if (goals.length > 0) {
+    console.log('[goals] GET /goals — Date Debug for first goal:');
+    console.log('  Raw due_date from DB:', goals[0].due_date);
+    console.log('  Raw reminder_date from DB:', goals[0].reminder_date);
+    console.log('  Converted dueDate:', goalsPayload[0].dueDate);
+    console.log('  Converted reminderDate:', goalsPayload[0].reminderDate);
+  }
 
   console.log('[goals] GET /goals — success: goals=', goalsPayload.length, 'itemCompletions keys=', Object.keys(itemCompletions).length);
   res.json({ goals: goalsPayload, itemCompletions });
@@ -164,13 +201,54 @@ router.post('/', async (req: Request, res: Response) => {
   const body = req.body ?? {};
   const id = body.id ?? `goal-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
+  // Get user's timezone
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('timezone')
+    .eq('id', userId)
+    .single();
+  const userTimezone = profile?.timezone || 'UTC';
+
+  const reminderDateFormatted = body.reminderDate ? formatDateOnly(new Date(body.reminderDate)) : null;
+  const dueDateFormatted = body.dueDate ? formatDateOnly(new Date(body.dueDate)) : null;
+
+  // Calculate UTC reminder time if reminder is set
+  let reminderUTC: string | null = null;
+  if (reminderDateFormatted && body.reminderTime) {
+    // Validate reminder time format
+    if (!body.reminderTime || typeof body.reminderTime !== 'string') {
+      console.error('[goals] Invalid reminderTime format:', body.reminderTime);
+    } else {
+      try {
+        console.log('[goals] Converting reminder time:', {
+          date: reminderDateFormatted,
+          time: body.reminderTime,
+          timezone: userTimezone
+        });
+        reminderUTC = convertLocalToUTC(reminderDateFormatted, body.reminderTime, userTimezone);
+        console.log('[goals] Converted to UTC:', reminderUTC);
+      } catch (error) {
+        console.error('[goals] Error converting reminder time to UTC:', error);
+        console.error('[goals] Input values:', {
+          reminderDate: body.reminderDate,
+          reminderDateFormatted,
+          reminderTime: body.reminderTime,
+          timezone: userTimezone
+        });
+        // Don't fail the request, just skip UTC conversion
+      }
+    }
+  }
+
   const goalRow = {
     id,
     user_id: userId,
     title: body.title ?? 'Untitled',
     category: body.category ?? null,
-    reminder_date: body.reminderDate ? new Date(body.reminderDate).toISOString() : null,
+    reminder_date: reminderDateFormatted,
     reminder_time: body.reminderTime ?? null,
+    reminder_utc: reminderUTC,
+    reminder_timezone: body.reminderTime ? userTimezone : null,
     pre_made_template_id: body.preMadeTemplateId ?? null,
     cover_index: body.coverIndex ?? 0,
     cover_url: body.coverUrl ?? null,
@@ -179,11 +257,18 @@ router.post('/', async (req: Request, res: Response) => {
     habits_done: body.habitsDone ?? 0,
     tasks_total: body.tasksTotal ?? 0,
     tasks_done: body.tasksDone ?? 0,
-    due_date: body.dueDate ? new Date(body.dueDate).toISOString() : null,
+    due_date: dueDateFormatted,
     achieved: body.achieved ?? false,
     created_at: body.createdAt ?? Date.now(),
     note: body.note ?? null,
   };
+
+  // DEBUG: Log what we're storing
+  console.log('[goals] POST /goals — Date Debug:');
+  console.log('  Received body.dueDate:', body.dueDate);
+  console.log('  Received body.reminderDate:', body.reminderDate);
+  console.log('  Converted due_date:', goalRow.due_date);
+  console.log('  Converted reminder_date:', goalRow.reminder_date);
 
   const { error: goalErr } = await admin.from('goals').insert(goalRow);
   if (goalErr) {
@@ -195,56 +280,76 @@ router.post('/', async (req: Request, res: Response) => {
   const items = body.items ?? [];
   let insertedItemRows: Record<string, unknown>[] = [];
   if (items.length > 0) {
-    const ts = Date.now();
-    const rows = items.map((it: Record<string, unknown>, index: number) => {
-      const type = it.type ?? 'task';
-      const isHabit = type === 'habit';
+    try {
+      const ts = Date.now();
+      const rows = items.map((it: Record<string, unknown>, index: number) => {
+        const type = it.type ?? 'task';
+        const isHabit = type === 'habit';
 
-      let dueDateIso: string | null = null;
-      if (it.dueDate != null) {
-        const raw = String(it.dueDate);
-        const parsedTs = Date.parse(raw);
-        if (!Number.isNaN(parsedTs)) {
-          dueDateIso = new Date(parsedTs).toISOString();
+        let dueDateFormatted: string | null = null;
+        if (it.dueDate != null) {
+          const raw = String(it.dueDate);
+          const parsedTs = Date.parse(raw);
+          if (!Number.isNaN(parsedTs)) {
+            dueDateFormatted = formatDateOnly(new Date(parsedTs));
+            
+            // Validate: task due date cannot be after goal's due date
+            // NOTE: Skip this validation during initial goal creation to allow AI-generated
+            // goals and user flexibility. Validation can still happen on updates.
+            // Compare date strings directly to avoid timezone issues
+            // if (type === 'task' && goalRow.due_date && dueDateFormatted) {
+            //   if (dueDateFormatted > goalRow.due_date) {
+            //     throw new Error('Task due date cannot be after the goal due date');
+            //   }
+            // }
+          }
         }
-      }
 
-      return {
-        id: `${id}-item-${ts}-${index}-${Math.random().toString(36).slice(2, 9)}`,
-        goal_id: id,
-        type,
-        title: it.title ?? '',
-        reminder_time: it.reminderTime ?? null,
-        note: it.note ?? null,
-        selected_days: isHabit ? (it.selectedDays ?? []) : null,
-        due_date: dueDateIso,
-        paused: it.paused === true,
-      };
-    });
-    const { data: insertedRows, error: itemsErr } = await admin.from('goal_items').insert(rows).select('*');
-    if (itemsErr) {
-      console.error('[goals] POST /goals goal_items insert failed:', itemsErr.message, itemsErr.details);
-      // Roll back the goal row so we don't end up with orphan goals that have no habits/tasks.
-      const { error: rollbackErr } = await admin.from('goals').delete().eq('id', id);
-      if (rollbackErr) {
-        console.error('[goals] POST /goals rollback delete failed:', rollbackErr.message, rollbackErr.details);
+        return {
+          id: `${id}-item-${ts}-${index}-${Math.random().toString(36).slice(2, 9)}`,
+          goal_id: id,
+          type,
+          title: it.title ?? '',
+          reminder_time: it.reminderTime ?? null,
+          reminder_timezone: it.reminderTime ? userTimezone : null,
+          note: it.note ?? null,
+          selected_days: isHabit ? (it.selectedDays ?? []) : null,
+          due_date: dueDateFormatted,
+          paused: it.paused === true,
+        };
+      });
+      const { data: insertedRows, error: itemsErr } = await admin.from('goal_items').insert(rows).select('*');
+      if (itemsErr) {
+        console.error('[goals] POST /goals goal_items insert failed:', itemsErr.message, itemsErr.details);
+        // Roll back the goal row so we don't end up with orphan goals that have no habits/tasks.
+        const { error: rollbackErr } = await admin.from('goals').delete().eq('id', id);
+        if (rollbackErr) {
+          console.error('[goals] POST /goals rollback delete failed:', rollbackErr.message, rollbackErr.details);
+        }
+        res.status(500).json({
+          error: 'Failed to create goal items',
+          details: itemsErr.details ? `${itemsErr.message}: ${itemsErr.details}` : itemsErr.message,
+        });
+        return;
       }
-      res.status(500).json({
-        error: 'Failed to create goal items',
-        details: itemsErr.details ? `${itemsErr.message}: ${itemsErr.details}` : itemsErr.message,
+      insertedItemRows = (insertedRows ?? []) as Record<string, unknown>[];
+    } catch (validationError) {
+      // Rollback goal creation if validation fails
+      await admin.from('goals').delete().eq('id', id);
+      res.status(400).json({ 
+        error: validationError instanceof Error ? validationError.message : 'Validation error' 
       });
       return;
     }
-    insertedItemRows = (insertedRows ?? []) as Record<string, unknown>[];
   }
 
   const created = {
     ...goalRow,
     category: goalRow.category,
-    reminderDate: goalRow.reminder_date ? new Date(goalRow.reminder_date).getTime() : null,
+    reminderDate: goalRow.reminder_date ? parseDateStringToTimestamp(goalRow.reminder_date) : null,
     reminderTime: goalRow.reminder_time,
     preMadeTemplateId: goalRow.pre_made_template_id,
-    dueDate: goalRow.due_date ? new Date(goalRow.due_date).getTime() : null,
+    dueDate: goalRow.due_date ? parseDateStringToTimestamp(goalRow.due_date) : null,
     createdAt: goalRow.created_at,
     note: goalRow.note,
     items: insertedItemRows.map((it: Record<string, unknown>) => ({
@@ -265,6 +370,124 @@ router.post('/', async (req: Request, res: Response) => {
     goalRow.pre_made_template_id.length > 0
   ) {
     await incrementPreMadeTemplateUsers(admin, goalRow.pre_made_template_id);
+  }
+
+  // Schedule notifications for goal and items
+  try {
+    console.log('[goals] POST /goals — Starting notification scheduling...');
+    
+    // Schedule goal reminder if set
+    if (goalRow.reminder_date && goalRow.reminder_time) {
+      console.log('[goals] Scheduling goal reminder:', {
+        userId,
+        goalId: id,
+        date: goalRow.reminder_date,
+        time: goalRow.reminder_time,
+        timezone: userTimezone
+      });
+      
+      await scheduleGoalReminder(
+        userId,
+        id,
+        goalRow.reminder_date,
+        goalRow.reminder_time,
+        userTimezone
+      );
+      
+      console.log('[goals] ✅ Goal reminder scheduled successfully');
+    } else {
+      console.log('[goals] ⏭️  No goal reminder to schedule (missing date or time)');
+    }
+
+    // Schedule goal due date notification if set
+    if (goalRow.due_date) {
+      const dueTime = process.env.NOTIFICATION_DEFAULT_TIME || '09:00 AM';
+      console.log('[goals] Scheduling goal due notification:', {
+        userId,
+        goalId: id,
+        dueDate: goalRow.due_date,
+        dueTime,
+        timezone: userTimezone
+      });
+      
+      await scheduleGoalDue(userId, id, goalRow.due_date, userTimezone, dueTime);
+      console.log('[goals] ✅ Goal due notification scheduled successfully');
+    } else {
+      console.log('[goals] ⏭️  No goal due date to schedule');
+    }
+
+    // Schedule notifications for habits and tasks
+    console.log('[goals] Processing items for notification scheduling:', {
+      totalItems: insertedItemRows.length,
+      items: insertedItemRows.map(it => ({
+        id: it.id,
+        type: it.type,
+        title: it.title,
+        reminderTime: it.reminder_time,
+        selectedDays: it.selected_days,
+        dueDate: it.due_date
+      }))
+    });
+    
+    for (const item of insertedItemRows) {
+      if (item.type === 'habit' && item.reminder_time && item.selected_days) {
+        const selectedDays = Array.isArray(item.selected_days)
+          ? item.selected_days
+          : JSON.parse(item.selected_days as string);
+        
+        console.log('[goals] Scheduling habit reminders:', {
+          itemId: item.id,
+          title: item.title,
+          reminderTime: item.reminder_time,
+          selectedDays,
+          timezone: userTimezone
+        });
+        
+        await scheduleHabitReminders(
+          userId,
+          id,
+          item.id as string,
+          selectedDays,
+          item.reminder_time as string,
+          userTimezone
+        );
+        
+        console.log('[goals] ✅ Habit reminders scheduled successfully');
+      } else if (item.type === 'task' && item.due_date && item.reminder_time) {
+        console.log('[goals] Scheduling task due notification:', {
+          itemId: item.id,
+          title: item.title,
+          dueDate: item.due_date,
+          reminderTime: item.reminder_time,
+          timezone: userTimezone
+        });
+        
+        await scheduleTaskDue(
+          userId,
+          id,
+          item.id as string,
+          item.due_date as string,
+          item.reminder_time as string,
+          userTimezone
+        );
+        
+        console.log('[goals] ✅ Task due notification scheduled successfully');
+      } else {
+        console.log('[goals] ⏭️  Skipping item (missing required fields):', {
+          itemId: item.id,
+          type: item.type,
+          hasReminderTime: !!item.reminder_time,
+          hasSelectedDays: !!item.selected_days,
+          hasDueDate: !!item.due_date
+        });
+      }
+    }
+
+    console.log(`[goals] POST /goals — ✅ All notifications scheduled for goal ${id}`);
+  } catch (scheduleError) {
+    console.error('[goals] POST /goals — ❌ Error scheduling notifications:', scheduleError);
+    console.error('[goals] Error stack:', scheduleError instanceof Error ? scheduleError.stack : 'No stack trace');
+    // Don't fail the request if notification scheduling fails
   }
 
   res.status(201).json(created);
@@ -293,20 +516,55 @@ router.patch('/:id', async (req: Request, res: Response) => {
   }
   const existingSource = (existing as Record<string, unknown>).source;
 
+  // Get user's timezone
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('timezone')
+    .eq('id', user!.id)
+    .single();
+  const userTimezone = profile?.timezone || 'UTC';
+
   const updates: Record<string, unknown> = {};
   if (body.achieved !== undefined) updates.achieved = body.achieved;
   if (body.habitsDone !== undefined) updates.habits_done = body.habitsDone;
   if (body.tasksDone !== undefined) updates.tasks_done = body.tasksDone;
   if (body.title !== undefined) updates.title = body.title;
   if (body.category !== undefined) updates.category = body.category;
+  
+  let reminderUpdated = false;
   if (body.reminderDate !== undefined) {
     updates.reminder_date =
-      body.reminderDate != null ? new Date(body.reminderDate).toISOString() : null;
+      body.reminderDate != null ? formatDateOnly(new Date(body.reminderDate)) : null;
+    reminderUpdated = true;
   }
-  if (body.reminderTime !== undefined) updates.reminder_time = body.reminderTime;
+  if (body.reminderTime !== undefined) {
+    updates.reminder_time = body.reminderTime;
+    reminderUpdated = true;
+  }
+  
+  // Recalculate UTC reminder if changed
+  if (reminderUpdated && updates.reminder_date && updates.reminder_time) {
+    try {
+      updates.reminder_utc = convertLocalToUTC(
+        updates.reminder_date as string,
+        updates.reminder_time as string,
+        userTimezone
+      );
+      updates.reminder_timezone = userTimezone;
+    } catch (error) {
+      console.error('[goals] Error converting reminder time to UTC:', error);
+    }
+  } else if (reminderUpdated && (!updates.reminder_date || !updates.reminder_time)) {
+    updates.reminder_utc = null;
+    updates.reminder_timezone = null;
+  }
+  
+  let dueDateUpdated = false;
   if (body.dueDate !== undefined) {
-    updates.due_date = body.dueDate != null ? new Date(body.dueDate).toISOString() : null;
+    updates.due_date = body.dueDate != null ? formatDateOnly(new Date(body.dueDate)) : null;
+    dueDateUpdated = true;
   }
+  
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: 'No updates provided' });
     return;
@@ -318,6 +576,29 @@ router.patch('/:id', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to update goal' });
     return;
   }
+
+  // Reschedule notifications if reminder or due date changed
+  try {
+    if (reminderUpdated) {
+      if (updates.reminder_date && updates.reminder_time) {
+        await scheduleGoalReminder(
+          user!.id,
+          id,
+          updates.reminder_date as string,
+          updates.reminder_time as string,
+          userTimezone
+        );
+      }
+    }
+
+    if (dueDateUpdated && updates.due_date) {
+      const dueTime = process.env.NOTIFICATION_DEFAULT_TIME || '09:00 AM';
+      await scheduleGoalDue(user!.id, id, updates.due_date as string, userTimezone, dueTime);
+    }
+  } catch (scheduleError) {
+    console.error('[goals] PATCH /goals — Error rescheduling notifications:', scheduleError);
+  }
+
   res.json({ success: true });
 });
 
@@ -333,15 +614,43 @@ router.patch('/:goalId/items/:itemId', async (req: Request, res: Response) => {
   const { goalId, itemId } = req.params;
   const body = req.body ?? {};
 
-  const { data: goal } = await admin.from('goals').select('user_id').eq('id', goalId).single();
+  const { data: goal } = await admin.from('goals').select('user_id, due_date').eq('id', goalId).single();
   if (!goal || goal.user_id !== user!.id) {
     res.status(404).json({ error: 'Goal not found' });
     return;
   }
 
+  // Get user's timezone
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('timezone')
+    .eq('id', user!.id)
+    .single();
+  const userTimezone = profile?.timezone || 'UTC';
+
+  // Validate: if item is a task with dueDate, it cannot be after goal's due_date
+  // NOTE: This is a soft validation - log warning but don't reject
+  // Compare date strings directly to avoid timezone issues
+  if (body.dueDate && goal.due_date) {
+    // Ensure both are in YYYY-MM-DD format for comparison
+    const taskDueDateStr = typeof body.dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.dueDate)
+      ? body.dueDate
+      : formatDateOnly(new Date(body.dueDate));
+    
+    if (taskDueDateStr > goal.due_date) {
+      console.warn(`[goals] Warning: Task due date ${taskDueDateStr} is after goal due date ${goal.due_date}`);
+      // Allow it anyway - user might have good reasons
+      // res.status(400).json({ error: 'Task due date cannot be after the goal due date' });
+      // return;
+    }
+  }
+
   const updates: Record<string, unknown> = {};
   if (body.title !== undefined) updates.title = body.title;
-  if (body.reminderTime !== undefined) updates.reminder_time = body.reminderTime;
+  if (body.reminderTime !== undefined) {
+    updates.reminder_time = body.reminderTime;
+    updates.reminder_timezone = body.reminderTime ? userTimezone : null;
+  }
   if (body.note !== undefined) updates.note = body.note;
   if (body.selectedDays !== undefined) updates.selected_days = body.selectedDays;
   if (body.dueDate !== undefined) updates.due_date = body.dueDate;
@@ -352,15 +661,52 @@ router.patch('/:goalId/items/:itemId', async (req: Request, res: Response) => {
     return;
   }
 
-  const { error: updErr } = await admin
+  const { error: updErr, data: updatedItem } = await admin
     .from('goal_items')
     .update(updates)
     .eq('id', itemId)
-    .eq('goal_id', goalId);
+    .eq('goal_id', goalId)
+    .select('*')
+    .single();
 
   if (updErr) {
     res.status(500).json({ error: 'Failed to update goal item' });
     return;
+  }
+
+  // Reschedule notifications if relevant fields changed
+  try {
+    if (updatedItem) {
+      if (updatedItem.type === 'habit' && (body.reminderTime !== undefined || body.selectedDays !== undefined)) {
+        const selectedDays = Array.isArray(updatedItem.selected_days)
+          ? updatedItem.selected_days
+          : JSON.parse(updatedItem.selected_days || '[]');
+        
+        if (updatedItem.reminder_time && selectedDays.length > 0) {
+          await scheduleHabitReminders(
+            user!.id,
+            goalId,
+            itemId,
+            selectedDays,
+            updatedItem.reminder_time,
+            userTimezone
+          );
+        }
+      } else if (updatedItem.type === 'task' && (body.dueDate !== undefined || body.reminderTime !== undefined)) {
+        if (updatedItem.due_date && updatedItem.reminder_time) {
+          await scheduleTaskDue(
+            user!.id,
+            goalId,
+            itemId,
+            updatedItem.due_date,
+            updatedItem.reminder_time,
+            userTimezone
+          );
+        }
+      }
+    }
+  } catch (scheduleError) {
+    console.error('[goals] PATCH items — Error rescheduling notifications:', scheduleError);
   }
 
   res.json({ success: true });
@@ -407,6 +753,14 @@ router.delete('/:id', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to delete goal' });
     return;
   }
+
+  // Cancel all notifications for this goal
+  try {
+    await cancelGoalNotifications(user!.id, id);
+  } catch (scheduleError) {
+    console.error('[goals] DELETE — Error cancelling notifications:', scheduleError);
+  }
+
   res.status(204).send();
 });
 

@@ -28,6 +28,7 @@ import UpgradePlanScreen from '../screens/UpgradePlanScreen';
 
 import type { TrackerCardItem } from '../components/TrackerCard';
 import AccountSecurityScreen from '../screens/AccountSecurityScreen';
+import TimeZoneScreen from '../screens/TimeZoneScreen';
 import DataAnalyticsScreen from '../screens/DataAnalyticsScreen';
 import AppAppearanceScreen from '../screens/AppAppearanceScreen';
 import HelpSupportScreen from '../screens/HelpSupportScreen';
@@ -150,6 +151,7 @@ export type RootStackParamList = {
   MyGoalsScreen: undefined;
   UpgradePlanScreen: undefined;
   AccountSecurityScreen: undefined;
+  TimeZoneScreen: undefined;
   ChangePasswordScreen: undefined;
   DataAnalyticsScreen: undefined;
   AppAppearanceScreen: undefined;
@@ -300,6 +302,11 @@ function RootNavigation() {
       <Stack.Screen
         name="AccountSecurityScreen"
         component={AccountSecurityScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="TimeZoneScreen"
+        component={TimeZoneScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen

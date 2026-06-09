@@ -8,6 +8,7 @@ import {
   syncRevenueCatUserIdentity,
 } from '../purchasesService';
 import { useOfferingsStore } from '../../../store/offeringsStore';
+import { registerPushNotifications, unregisterPushNotifications } from '../notifications/pushNotificationService';
 
 type AuthContextValue = {
   user: User | null;
@@ -116,15 +117,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void syncIdentity();
   }, [setCustomerInfo, user?.email, user?.id]);
 
+  // Register push notifications when user is authenticated
+  useEffect(() => {
+    const registerPushToken = async () => {
+      if (!user?.id) {
+        return;
+      }
+      // Register push notifications in the background
+      // This will request permissions and save the token to the database
+      await registerPushNotifications(user.id);
+    };
+    void registerPushToken();
+  }, [user?.id]);
+
   const signIn = useCallback(authService.signIn, []);
   const signInWithGoogle = useCallback(authService.signInWithGoogle, []);
   const signInWithApple = useCallback(authService.signInWithApple, []);
   const signUp = useCallback(authService.signUp, []);
   const signOut = useCallback(async () => {
+    // Unregister push notifications before signing out
+    if (user?.id) {
+      await unregisterPushNotifications(user.id);
+    }
     await logOutRevenueCat();
     setCustomerInfo(null);
     return authService.signOut();
-  }, [setCustomerInfo]);
+  }, [setCustomerInfo, user?.id]);
 
   const value: AuthContextValue = {
     user,

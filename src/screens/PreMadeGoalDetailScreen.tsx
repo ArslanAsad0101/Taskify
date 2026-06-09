@@ -71,7 +71,8 @@ function formatTaskDueDateForCard(raw: string | null | undefined, fallback?: str
 }
 
 function formatTime(hours: number, minutes: number, am: boolean): string {
-  const h = am ? (hours === 12 ? 12 : hours) : hours === 12 ? 0 : hours + 12;
+  // Keep hours in 12-hour format (1-12), don't convert to 24-hour
+  const h = hours === 0 ? 12 : hours;
   return `${h.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} ${am ? 'AM' : 'PM'}`;
 }
 
@@ -430,14 +431,26 @@ const PreMadeGoalDetailScreen = () => {
           note: h.note ?? undefined,
           selectedDays: h.selectedDays?.length ? h.selectedDays : [0, 1, 2, 3, 4, 5, 6],
         })),
-        ...taskItems.map((t, i) => ({
-          id: `pre-${preMadeGoal.id}-task-${i}`,
-          type: 'task' as const,
-          title: t.title,
-          reminderTime: t.reminderTime ?? goalReminderTime,
-          note: t.note ?? undefined,
-          dueDate: t.dueDate ?? dueDate.toISOString(),
-        })),
+        ...taskItems.map((t, i) => {
+          // Format due date as YYYY-MM-DD to avoid timezone issues
+          let taskDueDate: string | undefined;
+          if (t.dueDate) {
+            taskDueDate = t.dueDate;
+          } else if (dueDate) {
+            const year = dueDate.getFullYear();
+            const month = String(dueDate.getMonth() + 1).padStart(2, '0');
+            const day = String(dueDate.getDate()).padStart(2, '0');
+            taskDueDate = `${year}-${month}-${day}`;
+          }
+          return {
+            id: `pre-${preMadeGoal.id}-task-${i}`,
+            type: 'task' as const,
+            title: t.title,
+            reminderTime: t.reminderTime ?? goalReminderTime,
+            note: t.note ?? undefined,
+            dueDate: taskDueDate,
+          };
+        }),
       ],
     });
     resetDraft();
